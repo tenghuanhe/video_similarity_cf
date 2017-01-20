@@ -3,7 +3,7 @@ import org.apache.spark.{SparkContext, SparkConf}
 /**
   * Created by tenghuanhe on 2017/1/19.
   */
-object TencentVideo {
+object VideoSimilarityDistributed {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("Video Similarity CF").setMaster("local[4]")
     val sc = new SparkContext(conf)
@@ -43,24 +43,22 @@ object TencentVideo {
     // => List((v1id, v2id, similarity))
     val similarity_rdd = v1v2_rdd.map {
       case (v1id, v2id, p1p2_uid_list) =>
-        val norm_v1 = p1p2_uid_list.map(_._1).sum
-        val norm_v2 = p1p2_uid_list.map(_._2).sum
+        val norm_v1 = p1p2_uid_list.map(x => x._1 * x._1).sum
+        val norm_v2 = p1p2_uid_list.map(x => x._2 * x._2).sum
         val v1dotv2 = p1p2_uid_list.map(x => x._1 * x._2).sum
-        val similarity = v1dotv2 / (norm_v1 * norm_v2)
+        val similarity = v1dotv2 / (Math.sqrt(norm_v1) * Math.sqrt(norm_v2))
         (v1id, v2id, similarity)
     }
 
-    //  gropby v1id and got top 10 close videos for each video
+    //  gropby v1id and got top 10 similar videos for each video
     // => List((vid, List((vid, similarity)))
     val similarity_rdd_top10 = similarity_rdd.groupBy(x => x._1).map {
       case (vid, similarity_list) =>
-        val list = similarity_list.map(x => (x._2, x._3)).toList.sortBy(_._2).take(10)
-          .map(x => x._1 + ":" + x._2).mkString(" ")
+        val list = similarity_list.map(x => (x._2, x._3)).toList.sortBy(_._2).reverse.take(10)
+          .map(x => x._1 + ":" + x._2).mkString("\t")
         vid + "\t" + list
     }
 
-    similarity_rdd_top10.saveAsTextFile("video_similarity_top10")
-
+    similarity_rdd_top10.saveAsTextFile("video_similarity_top10_spark_distributed")
   }
-
 }
